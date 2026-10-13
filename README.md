@@ -56,7 +56,7 @@ Copy `.env.example` to `.env` and configure `MONGODB_URI` and `MONGODB_DATABASE`
 
 ## Production deployment
 
-The repository deploys as a **FastAPI Vercel project**. Its build command builds the React frontend into `public/`; Vercel serves those files through its CDN and executes the Python API as a function.
+The repository deploys as a **FastAPI Vercel project**. Its build command builds the React frontend into `public/`; Vercel serves those files through its CDN and executes the Python API as a function. A compiled production frontend is also committed in `public/` so the dashboard remains available when a host skips the custom frontend build. After changing React code, run `npm run build` and include the updated generated assets in the commit.
 
 1. Import this repository into Vercel, with the repository root as the project root.
 2. Choose the FastAPI preset. `vercel.json` already specifies the build command.

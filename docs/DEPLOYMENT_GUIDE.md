@@ -25,6 +25,8 @@ Source: https://github.com/vinilgarrepelli/climate-hazard-analyzer
 
 The repository configures the root Python entrypoint `app:app`; `app.py` imports the backend as a package so its relative imports are preserved. Runtime dependencies are declared in both `pyproject.toml` and `requirements.txt`. Its build script runs `npm ci` and builds React into `public/`, which Vercel serves alongside the FastAPI function. You do not need separate frontend and backend projects.
 
+The compiled production frontend is included in `public/` as well, so an import has usable React assets even when the host skips a custom build command. If you modify the UI, run `npm ci` and `npm run build`, then commit the updated `public/` files along with your source changes. The deployment build command can regenerate these assets from source.
+
 ## If you are updating the existing project
 
 Open **climate-lens-vinil** in Vercel. Under **Settings → Environment Variables**, confirm `STORAGE_BACKEND=tinydb-seeded` is present for Production. Go to **Deployments**, select the latest production deployment, and click **Redeploy** after changing variables. If the project is connected to GitHub, pushing an updated `main` triggers a new build. If it is not connected, link the repository under **Settings → Git** first.
