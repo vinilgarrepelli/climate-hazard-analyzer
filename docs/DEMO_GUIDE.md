@@ -2,12 +2,12 @@
 
 ## Prepare before the call
 
-1. Open the final app and run Hyderabad for 1990–2025 once, so it is cached.
+1. Open https://climate-lens-vinil.vercel.app and run Hyderabad for 1990–2025.
 2. Open the GitHub README and the local code in your editor.
 3. Keep `backend/climate.py`, `backend/main.py`, and `frontend/App.tsx` ready.
 4. Run the tests before the interview. Have a second terminal ready for changes.
 5. Keep your microphone and screen recording ready if you are making the optional demo video.
-6. Use the complete app for submission; the labeled fixed-location UI preview is for reviewing appearance and interactions.
+6. Submit the public Vercel URL. The private preview also has working controls connected to this Python API.
 
 ## A four-minute screen demonstration
 
@@ -17,8 +17,8 @@
 | 0:25–1:00 | Threshold card and Methodology tab | “A heatwave is at least three consecutive days above a fixed location-specific 95th-percentile threshold. The baseline is 1991–2020 and stays the same when I change the displayed period.” |
 | 1:00–1:45 | Days, Frequency, Intensity, and Duration chart tabs | “These are different indicators. The rolling average smooths short-term variation; the linear fit describes direction. Neither proves causation.” |
 | 1:45–2:15 | Evidence quality and Annual data | “Missing or invalid days break runs. Years below 95% coverage are excluded from regression and appear as gaps. Zero events and undefined intensity are different.” |
-| 2:15–2:45 | Event log and a repeated Run analysis | “The log exposes the events behind the aggregates. Repeating a query reads the saved analysis from the database, which avoids another weather API call.” |
-| 2:45–3:15 | Change to New Delhi or a different year range | “The same data model and definition apply to another location. Region-specific thresholds are recalculated from that location's fixed baseline.” |
+| 2:15–2:45 | Event log and a repeated Run analysis | “The log exposes the events behind the aggregates. Hyderabad's default result is stored in the versioned TinyDB dataset; new results are cached within the worker.” |
+| 2:45–3:15 | Change to London, then change the years to 2010–2025 and click Run analysis | “The same definition uses each location's own baseline. A narrower year selection reuses saved raw weather while recalculating the selected period.” |
 | 3:15–3:40 | Export CSV, then API docs | “Exports contain the annual results and method metadata. FastAPI exposes the validated request/response schema.” |
 | 3:40–4:00 | README AI disclosure and limitations | “I used AI substantially to assist implementation and testing. I can walk through the logic and explain where the assumptions need refinement.” |
 
@@ -51,8 +51,11 @@ The run breaks. I do not invent an observation. I show coverage and exclude low-
 **What happens to an event crossing 31 December?**
 It stays one event, counted in its onset year. Its heatwave days are split across their actual calendar years.
 
-**Why MongoDB?**
-Raw weather and nested analysis results fit document storage well. MongoDB provides durable cloud storage, TTL indexes for cache expiry, and atomic counters for rate limiting. TinyDB supports an easy local demonstration without cloud credentials.
+**Which database does the submitted app use?**
+The public demo uses TinyDB with a versioned compressed document dataset containing real Hyderabad and London history. Those documents survive redeployment; each worker loads and queries them. New query results are cached in memory and disappear on a cold restart. The MongoDB adapter provides durable shared writes, TTL indexes, and atomic rate-limit counters when an Atlas URI is configured. Atlas AI-client access was unavailable during setup, so I disclose this deployment tradeoff instead of claiming a cloud MongoDB connection.
+
+**Do all cities use saved data?**
+Hyderabad and London are preloaded. Other cities and custom coordinates fetch the real historical API on demand. Provider failure produces a visible error, never generated weather. Use the two preloaded cities for a reliable short demo, and acknowledge upstream availability as a limitation.
 
 **How do you stop arbitrary external requests?**
 The server fixes the API hosts in code. A caller supplies bounded coordinates and years, not a URL. Timeouts, response limits, no redirects, and bounded retries constrain upstream work.
@@ -69,7 +72,7 @@ A seasonally varying percentile and an explicit uncertainty analysis, followed b
 ## Submission fields
 
 - Repository: `https://github.com/vinilgarrepelli/climate-hazard-analyzer`
-- Deployed URL: use the final, externally accessible complete application URL.
+- Deployed URL: `https://climate-lens-vinil.vercel.app`
 - AI tools: OpenAI ChatGPT/Codex; substantial assistance for code, testing, documentation, and deployment.
 - Optional video: record the four-minute flow above, upload it to your own Loom/Drive account, and use a reviewer-accessible link.
 

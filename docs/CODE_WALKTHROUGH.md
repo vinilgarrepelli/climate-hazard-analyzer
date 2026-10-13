@@ -6,10 +6,10 @@
 2. `runAnalysis` posts those values to `/api/analyze`.
 3. `AnalysisRequest` in `backend/models.py` validates the input. Future/incomplete years, invalid coordinates, extra fields, and unsupported hazards are rejected.
 4. `rate_limit` checks the request budget. `run_analysis` looks for the exact computed result in the NoSQL cache.
-5. On a miss, `load_weather` looks for raw weather in the cache. It fetches ERA5 from a fixed HTTPS host only when that is also missing.
+5. On a miss, `load_weather` looks for exact raw weather or a saved interval covering the requested years. It fetches ERA5 from a fixed HTTPS host only when both are missing.
 6. `normalize_daily` converts units, checks values, and retains a row for each expected calendar day.
 7. `analyze` calculates the fixed-baseline percentile, detects runs, summarizes years, calculates comparisons/regressions, and reports coverage.
-8. The API saves the result to the database before returning JSON.
+8. The API writes the result to the selected document store before returning JSON. New seeded-mode writes last for the worker's lifetime; MongoDB writes are durable and shared.
 9. React renders cards, charts, annual rows, and the event log from that response.
 
 ## The important files
@@ -22,10 +22,11 @@
 | `backend/models.py` | Pydantic request schema | Bounded input and complete-year validation |
 | `backend/weather.py` | Public API ingestion | Fixed destinations, timeouts, response bounds, retries, raw caching |
 | `backend/climate.py` | Pure scientific indicator calculations | Percentile, consecutive days, cross-year attribution, coverage, comparisons |
-| `backend/storage.py` | NoSQL adapter | MongoDB vs local TinyDB, expiry, indexes, atomic counters |
+| `backend/storage.py` | NoSQL adapter | MongoDB, local TinyDB, explicit seeded TinyDB, expiry, cache limits, atomic MongoDB counters |
 | `backend/main.py` | HTTP routes and exports | Cache flow, status codes, rate limiting, security headers |
 | `tests/` | Correctness checks | Synthetic fixtures test rules; application data is real |
 | `scripts/build_frontend.py` | Production build | Build React assets for the CDN, keep Python API on the server |
+| `scripts/build_seed.py` | Real historical data ingestion | Package fetched weather and default analyses as versioned TinyDB documents; report provider failures |
 
 ## Explain percentile interpolation with a small example
 

@@ -5,6 +5,7 @@ import type { Analysis, Parameters, Region } from './types';
 const ChartPanel = lazy(() => import('./ChartPanel'));
 const lastYear = new Date().getFullYear() - 1;
 const previewMode = import.meta.env.VITE_PREVIEW_MODE === 'true';
+const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const home: Region = { name: 'Hyderabad, India', latitude: 17.385, longitude: 78.4867 };
 const initial: Parameters = { latitude: home.latitude, longitude: home.longitude, region_name: home.name, start_year: 1990, end_year: lastYear, hazard: 'heatwave', percentile: 95, min_duration: 3 };
 const number = (v: number | null | undefined, decimals = 0) => v == null ? '—' : v.toLocaleString('en-IN', { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
@@ -65,7 +66,7 @@ export default function App() {
   async function runAnalysis(input: Parameters, signal?: AbortSignal) {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal });
+      const response = await fetch(`${apiBase}/api/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal });
       const data = await parseResponse<Analysis>(response);
       setResult(data); setEventsPage(0); setMobileFilters(false);
     } catch (err) {
@@ -75,13 +76,7 @@ export default function App() {
 
   useEffect(() => {
     const abort = new AbortController(); controller.current = abort;
-    if (previewMode) {
-      fetch('/preview.json', { signal: abort.signal }).then(parseResponse<Analysis>).then(data => {
-        setResult(data); setParameters(data.request); setBusy(false);
-      }).catch(err => { if (err.name !== 'AbortError') { setError(err.message); setBusy(false); } });
-      return () => abort.abort();
-    }
-    fetch('/api/regions', { signal: abort.signal }).then(parseResponse<{ regions: Region[] }>).then(data => setRegions(data.regions)).catch(() => {});
+    fetch(`${apiBase}/api/regions`, { signal: abort.signal }).then(parseResponse<{ regions: Region[] }>).then(data => setRegions(data.regions)).catch(() => {});
     void runAnalysis(initial, abort.signal);
     return () => abort.abort();
   }, []);
@@ -92,10 +87,10 @@ export default function App() {
     setRegions(prev => prev.some(r => r.name === region.name) ? prev : [...prev, region]);
   }
 
-  async function searchCities(event: React.FormEvent) {
-    event.preventDefault(); setSearching(true); setSearchError('');
+  async function searchCities() {
+    setSearching(true); setSearchError('');
     try {
-      const response = await fetch(`/api/geocode?q=${encodeURIComponent(search.trim())}`);
+      const response = await fetch(`${apiBase}/api/geocode?q=${encodeURIComponent(search.trim())}`);
       const data = await parseResponse<{ results: Region[] }>(response);
       setSearchResults(data.results);
       if (!data.results.length) setSearchError('No matching cities. Try another name or enter coordinates.');
@@ -107,14 +102,7 @@ export default function App() {
     if (!result) return;
     setExporting(true); setError('');
     try {
-      if (previewMode) {
-        const fields = ['year', 'event_count', 'heatwave_days', 'mean_duration_days', 'longest_event_days', 'mean_intensity_c', 'peak_temperature_c', 'coverage_pct', 'reliable'] as const;
-        const csv = [fields.join(','), ...result.annual.map(row => fields.map(f => row[f] ?? '').join(','))].join('\n');
-        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-        const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'hyderabad-1990-2025-preview.csv'; anchor.click(); URL.revokeObjectURL(url);
-        return;
-      }
-      const response = await fetch('/api/export/csv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result.request) });
+      const response = await fetch(`${apiBase}/api/export/csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result.request) });
       if (!response.ok) await parseResponse(response);
       const url = URL.createObjectURL(await response.blob());
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = `heatwave-${result.request.start_year}-${result.request.end_year}.csv`; anchor.click();
@@ -141,10 +129,10 @@ export default function App() {
       <div className="brand"><div className="brand-mark"><Sun size={23} /></div><div>Climate Lens<span>HISTORICAL HAZARD INTELLIGENCE</span></div><button className="mobile-close icon-button" aria-label="Close filters" onClick={() => setMobileFilters(false)}><X size={20} /></button></div>
       <div className="sidebar-heading"><span className="sidebar-rule" /> YOUR ANALYSIS</div>
       <form onSubmit={submit} className="controls-form">
-        <fieldset disabled={previewMode}>
+        <fieldset disabled={busy}>
         <div className="field-block"><label htmlFor="hazard"><Sun size={15} /> Climate hazard</label><select id="hazard" value="heatwave" disabled><option value="heatwave">Heatwave</option></select><span className="field-help">Consecutive extreme-heat days</span></div>
         <div className="field-block"><label><MapPin size={15} /> Geographic region</label><div className="small-tabs" role="group" aria-label="Region input method"><button type="button" aria-pressed={regionMode === 'city'} className={regionMode === 'city' ? 'active' : ''} onClick={() => setRegionMode('city')}>City</button><button type="button" aria-pressed={regionMode === 'coordinates'} className={regionMode === 'coordinates' ? 'active' : ''} onClick={() => setRegionMode('coordinates')}>Coordinates</button></div>
-          {regionMode === 'city' ? <><label htmlFor="city" className="sr-only">Select city</label><select id="city" value={parameters.region_name} onChange={event => { const region = regions.find(r => r.name === event.target.value); if (region) chooseRegion(region); }}>{regions.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}</select><div className="search-box"><Search size={15} /><input aria-label="Search another city" placeholder="Search any city…" minLength={2} maxLength={80} value={search} onChange={event => setSearch(event.target.value)} /><button type="button" disabled={searching || search.trim().length < 2} aria-label="Find city" onClick={() => { void searchCities({ preventDefault() {} } as React.FormEvent); }}>{searching ? <LoaderCircle size={15} className="spin" /> : <ArrowRight size={15} />}</button></div>{searchError && <p className="field-error" role="status">{searchError}</p>}{searchResults.length > 0 && <ul className="search-results">{searchResults.map(r => <li key={`${r.latitude}-${r.longitude}`}><button type="button" onClick={() => chooseRegion(r)}>{r.name}</button></li>)}</ul>}</> : <><label htmlFor="region-label" className="sr-only">Location name</label><input id="region-label" placeholder="Location name" value={parameters.region_name} maxLength={80} onChange={event => setParameters(p => ({ ...p, region_name: event.target.value }))} required /><div className="coordinate-fields"><div><label htmlFor="latitude">Latitude</label><input id="latitude" type="number" min="-89.9" max="89.9" step="0.0001" value={parameters.latitude} onChange={event => setParameters(p => ({ ...p, latitude: Number(event.target.value) }))} required /></div><div><label htmlFor="longitude">Longitude</label><input id="longitude" type="number" min="-180" max="180" step="0.0001" value={parameters.longitude} onChange={event => setParameters(p => ({ ...p, longitude: Number(event.target.value) }))} required /></div></div></>}
+          {regionMode === 'city' ? <><label htmlFor="city" className="sr-only">Select city</label><select id="city" value={parameters.region_name} onChange={event => { const region = regions.find(r => r.name === event.target.value); if (region) chooseRegion(region); }}>{regions.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}</select><div className="search-box"><Search size={15} /><input aria-label="Search another city" placeholder="Search any city…" minLength={2} maxLength={80} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); if (search.trim().length >= 2) void searchCities(); } }} /><button type="button" disabled={searching || search.trim().length < 2} aria-label="Find city" onClick={() => { void searchCities(); }}>{searching ? <LoaderCircle size={15} className="spin" /> : <ArrowRight size={15} />}</button></div>{searchError && <p className="field-error" role="status">{searchError}</p>}{searchResults.length > 0 && <ul className="search-results">{searchResults.map(r => <li key={`${r.latitude}-${r.longitude}`}><button type="button" onClick={() => chooseRegion(r)}>{r.name}</button></li>)}</ul>}</> : <><label htmlFor="region-label" className="sr-only">Location name</label><input id="region-label" placeholder="Location name" value={parameters.region_name} maxLength={80} onChange={event => setParameters(p => ({ ...p, region_name: event.target.value }))} required /><div className="coordinate-fields"><div><label htmlFor="latitude">Latitude</label><input id="latitude" type="number" min="-89.9" max="89.9" step="0.0001" value={parameters.latitude} onChange={event => setParameters(p => ({ ...p, latitude: Number(event.target.value) }))} required /></div><div><label htmlFor="longitude">Longitude</label><input id="longitude" type="number" min="-180" max="180" step="0.0001" value={parameters.longitude} onChange={event => setParameters(p => ({ ...p, longitude: Number(event.target.value) }))} required /></div></div></>}
         </div>
         <div className="field-block"><label><BarChart3 size={15} /> Historical period</label><div className="year-fields"><div><label htmlFor="start-year">From</label><input id="start-year" type="number" min="1940" max={parameters.end_year} value={parameters.start_year} onChange={event => setParameters(p => ({ ...p, start_year: Number(event.target.value) }))} required /></div><span>—</span><div><label htmlFor="end-year">To</label><input id="end-year" type="number" min={parameters.start_year} max={lastYear} value={parameters.end_year} onChange={event => setParameters(p => ({ ...p, end_year: Number(event.target.value) }))} required /></div></div><div className="period-presets">{[1990, 2000, 2010].map(year => <button type="button" key={year} onClick={() => setParameters(p => ({ ...p, start_year: year, end_year: lastYear }))}>{year}–{String(lastYear).slice(2)}</button>)}</div><span className="field-help">Complete years, 1940–{lastYear}</span></div>
         <button type="button" className="advanced-toggle" aria-expanded={advanced} onClick={() => setAdvanced(a => !a)}>Heatwave definition <ChevronDown size={15} className={advanced ? 'rotate' : ''} /></button>
@@ -162,7 +150,7 @@ export default function App() {
       <section className="page-heading"><div><p className="eyebrow">PATTERNS, BEYOND THE WEATHER</p><h1>Understand the history of heat.</h1><p>Explore how extreme heat has changed, one region at a time.</p></div><div className="heading-actions"><button className="secondary-button mobile-filter-button" onClick={() => setMobileFilters(true)}><MapPin size={16} /> Filters</button><button className="secondary-button" disabled={!result || exporting || busy} onClick={() => { void exportCSV(); }}>{exporting ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />} Export CSV</button></div></section>
       {error && <div className="error-banner" role="alert"><Info size={20} /><div><strong>Analysis needs attention</strong><p>{error}</p>{result && <p>Your previous result is still shown below.</p>}</div><button className="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><X size={18} /></button></div>}
       {selectionChanged && <div className="selection-note"><Info size={16} /> Selection changed. Run analysis to update the results and export.</div>}
-      {previewMode && <div className="selection-note"><Info size={16} /> Interactive preview · verified Hyderabad data, 1990–2025. Explore charts, annual data, event history, and methodology. Other regions will be available in the final app.</div>}
+      {previewMode && <div className="selection-note"><Info size={16} /> Live interactive preview · Choose a city or coordinates and a year range, then click Run analysis to update the results.</div>}
       {!result ? <div className="empty-state card"><div className="empty-sun"><Sun size={40} /></div><h2>{busy ? 'Reading decades of weather history…' : 'Your analysis starts here'}</h2><p>{busy ? 'Fetching historical daily temperatures, checking coverage, and detecting consecutive heatwave events.' : 'Choose a city and time range, then run the analysis.'}</p>{busy && <div className="loading-bar"><span /></div>}</div> : <div className={busy ? 'results results-loading' : 'results'} aria-busy={busy}>
         <div className="region-strip"><div><span className="location-icon"><MapPin size={17} /></span><strong>{result.request.region_name}</strong><span className="region-coordinates">{result.request.latitude.toFixed(4)}°, {result.request.longitude.toFixed(4)}°</span></div><div><span>{result.request.start_year}–{result.request.end_year}</span><span className="strip-dot">·</span><span>{result.summary.years_analyzed} complete years</span><span className="cache-pill"><Check size={12} />{result.cache.analysis === 'hit' ? 'Cached analysis' : 'Analysis ready'}</span></div></div>
         <section className="insight-banner"><div className="insight-main"><span className="insight-icon">{percentChange != null && percentChange < 0 ? <ArrowDownRight size={29} /> : <TrendingUp size={29} />}</span><div><p className="eyebrow">WHAT THE DATA SAYS</p><h2>{comparison?.available ? <>{percentChange == null ? `${number(comparison.absolute_change, 1)} more heatwave days per year` : percentChange === 0 ? 'Average heatwave days remained stable' : <><span>{number(Math.abs(percentChange), 1)}%</span> {percentChange > 0 ? 'more' : 'fewer'} heatwave days per year</>}</> : 'A closer look at extreme heat'}</h2><p>{comparison?.available ? `${comparison.early_period}: ${number(comparison.early_mean, 1)} days/year → ${comparison.late_period}: ${number(comparison.late_mean, 1)} days/year` : comparison?.reason}</p></div></div><div className="insight-caveat"><Info size={16} /><span>A descriptive comparison of historical periods.<br />Read the methodology for assumptions and limits.</span></div></section>
@@ -175,7 +163,7 @@ export default function App() {
           {activeTab === 'method' && <Methodology result={result} />}
         </div>
         <div className="insights-list">{result.insights.slice(1).map(insight => <p key={insight}><Info size={15} />{insight}</p>)}</div>
-        <footer className="results-footer"><span>{result.source.attribution}</span><div><button className="text-link" onClick={() => window.print()}>Print / save PDF <ArrowUpRight size={13} /></button>{!previewMode && <a href="/api/docs" target="_blank" rel="noreferrer" className="text-link">API documentation <ArrowUpRight size={13} /></a>}</div></footer>
+        <footer className="results-footer"><span>{result.source.attribution}</span><div><button className="text-link" onClick={() => window.print()}>Print / save PDF <ArrowUpRight size={13} /></button><a href={`${apiBase}/api/docs`} target="_blank" rel="noreferrer" className="text-link">API documentation <ArrowUpRight size={13} /></a></div></footer>
       </div>}
       <footer className="page-footer"><span>Climate Lens</span><p>Historical evidence, with its assumptions in view.</p></footer>
     </main>

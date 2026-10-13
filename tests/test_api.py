@@ -108,3 +108,13 @@ def test_serverless_never_silently_uses_temporary_file(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
     with pytest.raises(StorageError, match="persistent"):
         DocumentStore()
+
+
+def test_private_preview_can_call_python_api_with_cors(api):
+    client, store, calls = api
+    origin = "https://climate-lens-vinil-preview.vinilgoudgarrepelli.chatgpt.site"
+    response = client.options("/api/analyze", headers={"Origin": origin,
+        "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "Content-Type"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert client.post("/api/analyze", json=PARAMETERS, headers={"Origin": origin}).headers["access-control-allow-origin"] == origin

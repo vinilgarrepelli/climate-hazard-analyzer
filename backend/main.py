@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from .climate import ALGORITHM_VERSION, analyze
 from .models import AnalysisRequest
@@ -24,6 +25,10 @@ from .weather import GEOCODE_URL, WeatherError, get_json, load_weather
 load_dotenv()
 logger = logging.getLogger("climate_lens")
 app = FastAPI(title="Climate Lens API", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+app.add_middleware(CORSMiddleware,
+    allow_origins=["https://climate-lens-vinil-preview.vinilgoudgarrepelli.chatgpt.site", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
+)
 _limits = defaultdict(deque)
 REGIONS = [
     {"name": "Hyderabad, India", "latitude": 17.385, "longitude": 78.4867},

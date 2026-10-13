@@ -66,7 +66,13 @@ async def load_weather(request, store):
     key = "weather:" + hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
     cached = await store.get(key)
     if cached:
+        if "request_latitude" not in cached:
+            cached = {**cached, "request_latitude": request.latitude, "request_longitude": request.longitude}
+            await store.put(key, cached, int(os.getenv("CACHE_TTL_DAYS", "30")) * 86400)
         return cached, "hit"
+    covered = await store.find_weather(request.latitude, request.longitude, start.isoformat(), end.isoformat())
+    if covered:
+        return covered, "hit-range"
     # Coalesce identical cold requests within a worker. Mongo handles persistence
     # across workers; a distributed ingestion lock is a documented next step.
     lock = _inflight.setdefault(key, asyncio.Lock())
@@ -81,6 +87,7 @@ async def load_weather(request, store):
             except ValueError as exc:
                 raise WeatherError(str(exc)) from exc
             data = {
+                "request_latitude": request.latitude, "request_longitude": request.longitude,
                 "records": records, "cleaning": cleaning,
                 "source": {
                     "provider": "Open-Meteo Historical Weather API", "model": "ERA5",

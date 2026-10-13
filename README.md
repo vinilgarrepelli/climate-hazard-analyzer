@@ -2,6 +2,10 @@
 
 A React dashboard and Python API for understanding historical heatwave frequency, duration, and intensity at a selected geographic location. The application uses real **Open-Meteo ERA5 reanalysis**, a fixed reference period, and a NoSQL document cache. No generated weather data is used in the application.
 
+**Live application:** https://climate-lens-vinil.vercel.app  
+**Manual deployment:** [step-by-step guide](docs/DEPLOYMENT_GUIDE.md)  
+**Interview preparation:** [four-minute demonstration](docs/DEMO_GUIDE.md) and [code walkthrough](docs/CODE_WALKTHROUGH.md)
+
 ## Features
 
 | Requirement | Implementation |
@@ -13,7 +17,7 @@ A React dashboard and Python API for understanding historical heatwave frequency
 | Frequency, duration, intensity | Annual series, interactive metric tabs, and a paginated event log |
 | Honest summary insights | Equal-period comparisons, zero-baseline handling, and descriptive regression |
 | Python backend | FastAPI with generated OpenAPI documentation at `/api/docs` |
-| NoSQL persistence | MongoDB in cloud deployment; TinyDB document database for local development |
+| NoSQL storage | Versioned TinyDB historical documents in the public demo; MongoDB adapter for durable cloud writes; local TinyDB for development |
 | Data handling | Missing dates, invalid values, duplicate dates, Celsius/Fahrenheit conversion, coverage reporting |
 | Security and performance | Validated inputs, body limits, fixed upstream hosts, bounded requests, caching, rate limiting |
 | Bonus export and trends | CSV export, browser print-to-PDF, ordinary least squares, three-year rolling average |
@@ -56,22 +60,25 @@ The repository deploys as a **FastAPI Vercel project**. Its build command builds
 
 1. Import this repository into Vercel, with the repository root as the project root.
 2. Choose the FastAPI preset. `vercel.json` already specifies the build command.
-3. Add **encrypted** environment variables: `MONGODB_URI` and `MONGODB_DATABASE=climate_lens`.
-4. Configure MongoDB Atlas network access for the chosen hosting environment and a least-privilege database account.
-5. Deploy. Check `/api/health`; production must report `database: mongodb` and `status: ok`.
-6. Run an analysis twice. The second response should report `cache.analysis: hit`.
-7. Verify that the URL submitted to reviewers is accessible to them without your account.
+3. For the included demonstration, add `STORAGE_BACKEND=tinydb-seeded` to the Production environment. The versioned dataset is already committed; no database credentials are needed for this mode.
+4. Deploy. Check `/api/health`; this mode reports `database: tinydb-seeded` and `status: ok`.
+5. Under Settings → Deployment Protection, choose **Only Preview Deployments** for Vercel Authentication so production can be reviewed without signing in. Check the production URL in an incognito window.
+6. Demonstrate Hyderabad or London for 1990–2025, change the years or heatwave rule, and run the analysis. Raw historical data is read from the NoSQL store before computing a new result.
 
-**Production does not silently fall back to a temporary JSON file.** Vercel's filesystem is not durable database storage. A missing or unavailable MongoDB configuration produces a clear 503 response.
+For durable, shared cloud writes, instead configure **encrypted** `MONGODB_URI` and `MONGODB_DATABASE=climate_lens`, a project-scoped Atlas database user, and suitable network access. A configured URI takes priority over the seeded mode; `/api/health` must then report `database: mongodb`. MongoDB results and rate-limit counters persist across workers.
 
-The optional private UI preview is built with `VITE_PREVIEW_MODE=true` and a verified `preview.json` snapshot. It is clearly labeled, fixed to Hyderabad 1990–2025, and is distinct from the complete Python/MongoDB application. The default production build does not enable this mode.
+**Storage tradeoff:** the public demo explicitly uses a compressed TinyDB JSON database at `backend/data/climate_seed.json.gz`. Real Hyderabad and London weather and default analyses survive restarts because they are versioned deployment assets. Each worker loads the documents into TinyDB and reads them on API requests. New analyses and weather fetched on demand are cached in that worker's memory, bounded to 32 additional documents; those writes are lost on a cold restart and are not shared between workers. This mode is suitable for the interview demonstration, while MongoDB is the adapter for durable mutable production storage. It does not claim to provide a persistent cloud write database.
+
+The seed was ingested from the real ERA5 API using `python scripts/build_seed.py`; it records source coordinates, dates, retrieval time, and expiry. Some other preset cities could not be preloaded because their provider requests failed. They and custom coordinates use the regular live ingestion path and show an explicit error if the provider is unavailable. No synthetic fallback is used.
+
+**Production does not silently fall back to a temporary JSON file.** Without a URI or the explicit seeded setting, serverless production returns a clear 503 response. The optional private UI preview uses `VITE_PREVIEW_MODE=true` and `VITE_API_BASE_URL=https://climate-lens-vinil.vercel.app`; its city, coordinate, year, and definition controls call the same live Python API. These frontend settings are unnecessary for the normal same-origin production build.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
   UI["React dashboard"] --> API["Python FastAPI"]
-  API --> DB["MongoDB document cache"]
+  API --> DB["NoSQL document store"]
   DB -->|"analysis hit"| API
   API -->|"weather cache miss"| WX["Open-Meteo ERA5"]
   WX --> CLEAN["Normalize daily records"]
@@ -80,7 +87,7 @@ flowchart TD
   API -->|"JSON or CSV"| UI
 ```
 
-The frontend never calls a database or receives database credentials. The pure calculations in `backend/climate.py` do not depend on HTTP or storage, so they are easy to explain and test. Raw weather documents and computed analysis documents have separate cache keys and expiry times. Computed results are persisted before being returned; repeated API calls read them from the database.
+The frontend never calls a database or receives database credentials. The pure calculations in `backend/climate.py` do not depend on HTTP or storage, so they are easy to explain and test. Raw weather documents and computed analysis documents have separate cache keys and expiry times. Computed results are written to the selected document store before being returned. Repeated API calls read the store; in seeded mode, new writes last only for the worker's lifetime.
 
 ## Data source and handling
 
@@ -141,7 +148,7 @@ Validation errors return 422; oversized bodies 413; rate limits 429 with `Retry-
 
 ## Security and performance decisions
 
-MongoDB has atomic, distributed fixed-minute counters (12 analysis/geocode/export requests per client per minute by default). Local TinyDB mode uses an in-process rolling-minute limiter. The production client address is taken from the hosting ingress; multi-proxy deployments should review this trust boundary. SHA-256 hashes are stored instead of raw client addresses.
+MongoDB has atomic, distributed fixed-minute counters (12 analysis/geocode/export requests per client per minute by default). TinyDB modes use an in-process rolling-minute limiter, which is per worker and is not a global production rate limit. The production client address is taken from the hosting ingress; multi-proxy deployments should review this trust boundary. SHA-256 hashes are stored instead of raw client addresses.
 
 External destinations are fixed in server code; users cannot supply URLs. Redirects are disabled, connect/read timeouts are enforced, responses are bounded at 4 MB, and a transient transport/5xx failure receives at most one retry. Input bodies are bounded at 4 KiB, extra fields are forbidden, dates/coordinates/rules are bounded, and NaN/infinity are rejected.
 
@@ -156,7 +163,7 @@ React charts are loaded in a separate bundle, long event lists are paginated, an
 npm run build
 ```
 
-The 29 tests cover percentile interpolation, threshold equality, missing dates, null values, leap days, unit conversion, duplicates, outliers, year-boundary events, fixed baselines, coverage exclusion, zero denominators, regression slopes, cache reuse, CSV metadata, formula injection, input validation, body limits, rate limiting, upstream errors, and preventing temporary-file storage in serverless production.
+The 33 tests cover percentile interpolation, threshold equality, missing dates, null values, leap days, unit conversion, duplicates, outliers, year-boundary events, fixed baselines, coverage exclusion, zero denominators, regression slopes, cache reuse, CSV metadata, formula injection, input validation, body limits, rate limiting, upstream errors, preventing silent temporary-file storage in serverless production, seeded document loading, reuse of a wider stored interval, bounded runtime caching, and the preview's exact-origin CORS requests.
 
 Real Hyderabad ERA5 data for 1990–2025 was also fetched and processed on 13 October 2026. It contained 13,149 valid daily observations, 61 detected events, 465 heatwave days, and a 39.3°C threshold under this definition. The first/last five-year comparison showed fewer heatwave days in the latter window; the app reports this result honestly rather than assuming an increase. These figures can change after source revisions or method changes.
 
@@ -171,7 +178,7 @@ The submitted code should be reviewed by the candidate before the interview. The
 - Day-of-year percentile climatology, sensitivity analysis, and regional definitions.
 - Mann–Kendall/Sen's slope with appropriate treatment of autocorrelation and uncertainty.
 - Spatial aggregation over multiple grid cells and map selection.
-- Reusable baseline datasets and incremental cache ingestion across overlapping date ranges.
+- Incremental ingestion and broader preloading; narrower queries already reuse a covering saved weather interval.
 - Distributed ingestion locks, explicit global upstream budgets, structured observability, and broader end-to-end browser tests.
 - More hazards only after their scientific definitions and data requirements are validated.
 
