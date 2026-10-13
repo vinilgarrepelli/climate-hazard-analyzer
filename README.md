@@ -2,8 +2,8 @@
 
 A React dashboard and Python API for understanding historical heatwave frequency, duration, and intensity at a selected geographic location. The application uses real **Open-Meteo ERA5 reanalysis**, a fixed reference period, and a NoSQL document cache. No generated weather data is used in the application.
 
-**Live application:** https://climate-lens-vinil.vercel.app  
-**Manual deployment:** [step-by-step guide](docs/DEPLOYMENT_GUIDE.md)  
+**Live application:** https://climate-lens-vinil.vercel.app
+**Manual deployment:** [step-by-step guide](docs/DEPLOYMENT_GUIDE.md)
 **Interview preparation:** [four-minute demonstration](docs/DEMO_GUIDE.md) and [code walkthrough](docs/CODE_WALKTHROUGH.md)
 
 ## Features

@@ -1,6 +1,6 @@
 # Deploy Climate Lens manually on Vercel
 
-Current public app: https://climate-lens-vinil.vercel.app  
+Current public app: https://climate-lens-vinil.vercel.app
 Source: https://github.com/vinilgarrepelli/climate-hazard-analyzer
 
 ## Deploy from GitHub
