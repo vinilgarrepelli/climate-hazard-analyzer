@@ -23,7 +23,7 @@ Source: https://github.com/vinilgarrepelli/climate-hazard-analyzer
 5. Click **Deploy**. Wait for **Ready**, then open the assigned `.vercel.app` production URL.
 6. In **Project Settings → Deployment Protection → Vercel Authentication**, choose **Only Preview Deployments** and save. Production should be public. Open the production URL in an incognito window to confirm reviewers do not need your account.
 
-The repository configures the Python entrypoint `backend.main:app`. Its build script runs `npm ci` and builds React into `public/`, which Vercel serves alongside the FastAPI function. You do not need separate frontend and backend projects.
+The repository configures the root Python entrypoint `app:app`; `app.py` imports the backend as a package so its relative imports are preserved. Runtime dependencies are declared in both `pyproject.toml` and `requirements.txt`. Its build script runs `npm ci` and builds React into `public/`, which Vercel serves alongside the FastAPI function. You do not need separate frontend and backend projects.
 
 ## If you are updating the existing project
 

@@ -24,6 +24,7 @@
 | `backend/climate.py` | Pure scientific indicator calculations | Percentile, consecutive days, cross-year attribution, coverage, comparisons |
 | `backend/storage.py` | NoSQL adapter | MongoDB, local TinyDB, explicit seeded TinyDB, expiry, cache limits, atomic MongoDB counters |
 | `backend/main.py` | HTTP routes and exports | Cache flow, status codes, rate limiting, security headers |
+| `app.py` | Cloud entrypoint | Import the backend as a package so relative imports work when the host loads the entrypoint |
 | `tests/` | Correctness checks | Synthetic fixtures test rules; application data is real |
 | `scripts/build_frontend.py` | Production build | Build React assets for the CDN, keep Python API on the server |
 | `scripts/build_seed.py` | Real historical data ingestion | Package fetched weather and default analyses as versioned TinyDB documents; report provider failures |

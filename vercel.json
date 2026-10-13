@@ -3,7 +3,7 @@
   "framework": "fastapi",
   "buildCommand": "python scripts/build_frontend.py",
   "functions": {
-    "backend/main.py": { "maxDuration": 60, "excludeFiles": "{tests/**,docs/**,.data/**,node_modules/**,frontend/**}" }
+    "app.py": { "maxDuration": 60, "excludeFiles": "{tests/**,docs/**,.data/**,node_modules/**,frontend/**}" }
   },
   "headers": [
     {
